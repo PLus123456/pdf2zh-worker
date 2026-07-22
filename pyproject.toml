@@ -1,0 +1,34 @@
+[project]
+name = "pdf2zh-worker"
+version = "1.0.0"
+description = "被动式 HTTP wrapper：按 TRANSLATION_WORKER_PROTOCOL.md v1 驱动 pdf2zh-next 做 PDF 文档翻译"
+readme = "README.md"
+requires-python = ">=3.10,<3.14"
+license = { text = "AGPL-3.0-or-later" }
+
+# fastapi / uvicorn 本来就在 pdf2zh-next 的依赖树里（Requires-Dist: fastapi>=0.115.12、
+# uvicorn>=0.34.2），这里显式声明只是把契约写死，实际不新增任何轮子。
+dependencies = [
+    "pdf2zh-next>=2.9.0,<3",
+    "fastapi>=0.115.12",
+    "uvicorn>=0.34.2",
+    "pydantic>=2.10.6",
+]
+
+[project.optional-dependencies]
+# 契约测试跑假 runner，不需要装 pdf2zh-next（它要 Python>=3.10 且依赖树很重）
+test = ["pytest>=7.4", "httpx>=0.27"]
+
+[project.scripts]
+pdf2zh-worker-server = "pdf2zh_worker.__main__:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["pdf2zh_worker"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning"]

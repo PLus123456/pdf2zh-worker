@@ -1,0 +1,70 @@
+# pdf2zh-worker 的 nginx 反代示例
+#
+# worker 只监听 127.0.0.1:8791，公网唯一入口是这里的 443。
+# 放到 /etc/nginx/sites-available/ 后 ln -s 到 sites-enabled/，改完 nginx -t && systemctl reload nginx。
+
+upstream pdf2zh_worker {
+    server 127.0.0.1:8791;
+    keepalive 8;
+}
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name worker.example.com;          # ← 改成你的域名
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name worker.example.com;          # ← 改成你的域名
+
+    ssl_certificate     /etc/letsencrypt/live/worker.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/worker.example.com/privkey.pem;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_ciphers         HIGH:!aNULL:!MD5;
+
+    # 只有主应用会来敲这台机器。把主应用出口 IP 写死，等于白嫖一层防护；
+    # 主应用 IP 会变（比如在容器平台上）就把这三行注释掉，只靠 Bearer token。
+    # allow 203.0.113.10;
+    # allow 2001:db8::10;
+    # deny  all;
+
+    # 要 ≥ worker 的 TRANSLATE_WORKER_MAX_MB，否则大论文会被 nginx 先拦掉，
+    # 主应用看到的是 413 却不知道是谁拦的
+    client_max_body_size 100m;
+
+    access_log /var/log/nginx/pdf2zh-worker.access.log;
+    error_log  /var/log/nginx/pdf2zh-worker.error.log;
+
+    location / {
+        proxy_pass http://pdf2zh_worker;
+        proxy_http_version 1.1;
+        proxy_set_header Host              $host;
+        proxy_set_header X-Real-IP         $remote_addr;
+        proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection        "";
+
+        # 上传源 PDF 时别在 nginx 落一遍盘，直接边收边转给 worker
+        proxy_request_buffering off;
+        # 下载产物同理，让 PDF 流式回主应用
+        proxy_buffering off;
+
+        # 主应用的传输类调用给了 10 分钟余量，这边要留够，不然大文件传一半被掐
+        proxy_connect_timeout 30s;
+        proxy_send_timeout    600s;
+        proxy_read_timeout    600s;
+    }
+
+    # healthz 不需要留档，日志里全是主应用每 20s 一次的轮询
+    location = /healthz {
+        access_log off;
+        proxy_pass http://pdf2zh_worker;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header Connection "";
+    }
+}

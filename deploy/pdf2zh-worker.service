@@ -1,0 +1,34 @@
+# 参考副本 —— install.sh 会按实际路径生成 /etc/systemd/system/pdf2zh-worker.service。
+# 手工部署时把 <APP_DIR>/<DATA_DIR> 换成真实路径再 cp 过去。
+
+[Unit]
+Description=pdf2zh 文档翻译 worker（TRANSLATION_WORKER_PROTOCOL v1）
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pdf2zh
+Group=pdf2zh
+EnvironmentFile=/etc/pdf2zh-worker/worker.env
+WorkingDirectory=/var/lib/pdf2zh-worker
+ExecStart=/opt/pdf2zh-worker/venv/bin/python -m pdf2zh_worker
+Restart=always
+RestartSec=5
+# 翻译子进程收摊要几秒，别让 systemd 急着 SIGKILL
+TimeoutStopSec=60
+KillMode=mixed
+
+# —— 安全加固：这台机器只干一件事，能关的都关掉 ——
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+ReadWritePaths=/var/lib/pdf2zh-worker
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
