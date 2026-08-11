@@ -34,11 +34,14 @@
 在**目标机器**上（Linux + systemd）：
 
 ```bash
-git clone <本仓库> pdf2zh-worker && cd pdf2zh-worker
+git clone https://github.com/PLus123456/pdf2zh-worker.git && cd pdf2zh-worker
 sudo ./install.sh            # 打开菜单，选 1 安装
 # 或者无人值守：
 sudo ASSUME_YES=1 ./install.sh install
 ```
+
+机器上没有 git 也行，`scp -r` 把整个目录拷过去一样——`install.sh` 只认当前目录的
+源码，自己不联网拉仓库。
 
 装的时候它会做这些事：
 
@@ -69,7 +72,7 @@ sudo pdf2zh-worker
    6) 查看 / 轮换鉴权 token
    7) 启动     8) 停止     9) 重启
   10) 预热模型资源
-  11) 清理翻译缓存（换了底层模型之后用）
+  11) 清理翻译缓存（保险丝，一般用不到）
   12) 体检（doctor）
   13) 卸载
    0) 退出
@@ -148,22 +151,26 @@ worker 只监听 `127.0.0.1`，公网唯一入口是 nginx 443。
 | `TRANSLATE_WORKER_POOL_MAX_WORKERS` | 跟随 qps | 翻译线程池大小 |
 | `TRANSLATE_WORKER_IGNORE_CACHE` | `false` | 跳过 pdf2zh 的本地翻译缓存，见下 |
 
-### ⚠️ 关于翻译缓存
+### 关于翻译缓存
 
 pdf2zh 会把「原文 → 译文」存在本地 SQLite 里（`<data>/.cache/babeldoc/cache.v1.db`），
-重复的段落不再花 token。缓存键是 `(引擎, 引擎参数, 原文)`，而**引擎参数里的模型名对我们
-永远是那个占位符**（`llm.model`，真实路由由主应用代理服务端强制）——也就是说
-worker 根本不知道背后到底跑的哪个模型。
+重复的段落不再花 token。缓存键是 `(引擎, 引擎参数, 原文)`，其中引擎参数带 `llm.model`。
 
-后果：**主应用 admin 把 TRANSLATION 路由换成另一个模型之后，这台机器还会拿旧模型的
-译文来顶**，直到缓存过期（保留最近 5 万条）。换模型时二选一：
+主应用派发时会把 `llm.model` 生成成**随真实路由变化的标识**（供应商 + 底层模型 + 温度 +
+路由行后缀，形如 `OpenAI_主力-deepseek-chat-t2-x7k2ma`），worker 原样透传。所以主应用
+admin 换了 TRANSLATION 路由、调了温度之后，标识就变了，**缓存自动换键，不会再拿旧模型的
+译文来顶**；换回同一个模型则正常命中。这一层不用运维操心。
+
+因此下面这两个开关是**保险丝**，正常换模型用不到：
 
 ```bash
 sudo pdf2zh-worker            # 菜单 → 11) 清理翻译缓存（模型/字体资源不动）
 sudo pdf2zh-worker clear-cache
 ```
 
-或者干脆把 `TRANSLATE_WORKER_IGNORE_CACHE=true` 常开——代价是重复内容每次都重新花钱。
+或 `TRANSLATE_WORKER_IGNORE_CACHE=true` 常开（代价是重复内容每次都重新花钱）。真正用得上
+它们的只有一种边角情况：主应用那边路由解析一直失败、`llm.model` 长期兜底成固定的
+`lecture-live-gateway`，这时不同底层模型会挤在同一个缓存键上，才需要手动清一次。
 
 `HOME` / `XDG_CACHE_HOME` / `XDG_CONFIG_HOME` 由安装脚本指到数据目录里——
 pdf2zh 在 **import 的时候**就会往 `~/.config/pdf2zh` 写东西，HOME 不可写会直接起不来。

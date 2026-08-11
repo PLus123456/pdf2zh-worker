@@ -82,10 +82,11 @@ class WorkerConfig:
     #: 翻译线程池大小；None = 跟随 qps（pdf2zh 默认行为）
     pool_max_workers: Optional[int]
     #: 跳过 pdf2zh 的本地翻译缓存。
-    #: 缓存键是 (engine, engine_params, 原文)，而 engine_params 里的模型名对我们
-    #: **永远是占位符**（真实路由由主应用代理服务端强制）——所以主应用换了底层模型之后，
-    #: 这台机器还会拿旧模型的译文来顶。要么在换模型时开这个开关，要么清一次缓存
-    #: （`pdf2zh-worker` 菜单里有「清理翻译缓存」）。默认关＝用缓存，省钱。
+    #: 缓存键是 (engine, engine_params, 原文)，engine_params 里带 llm.model。主应用派发时会把
+    #: llm.model 生成成随真实路由变化的标识（供应商+底层模型+温度+路由行后缀），worker 原样透传——
+    #: 换模型即换缓存键，不会复用旧模型的译文，同模型正常命中。所以正常换模型不用动这个开关；
+    #: 只有主应用路由解析失败、标识长期兜底成固定占位符时，不同模型才会挤同一个键，那时才用得上。
+    #: 默认关＝用缓存，省钱。
     ignore_cache: bool
 
     @property
