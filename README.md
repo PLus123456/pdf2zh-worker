@@ -34,11 +34,14 @@
 在**目标机器**上（Linux + systemd）：
 
 ```bash
-git clone <本仓库> pdf2zh-worker && cd pdf2zh-worker
+git clone https://github.com/PLus123456/pdf2zh-worker.git && cd pdf2zh-worker
 sudo ./install.sh            # 打开菜单，选 1 安装
 # 或者无人值守：
 sudo ASSUME_YES=1 ./install.sh install
 ```
+
+机器上没有 git 也行，`scp -r` 把整个目录拷过去一样——`install.sh` 只认当前目录的
+源码，自己不联网拉仓库。
 
 装的时候它会做这些事：
 
